@@ -18,7 +18,10 @@ from os.path import (
     split,
     splitext,
 )
+from pathlib import Path
 from typing import ClassVar
+
+import yaml
 
 try:
     from astropy.io import fits
@@ -39,8 +42,8 @@ class Step:
     """
 
     spec = """
-    pre_hooks          = string_list(default=list())
-    post_hooks         = string_list(default=list())
+    pre_hooks          = list(default=list())        # List of Step classes to run before step
+    post_hooks         = list(default=list())        # List of Step classes to run after step
     output_file        = output_file(default=None)   # File to save output to.
     output_dir         = string(default=None)        # Directory path for output files
     output_ext         = string()                    # Default type of output
@@ -248,7 +251,7 @@ class Step:
             If not provided, try the following (in order):
             - The ``name`` parameter in the config file fragment
             - The name of returned class
-        config_file : str, optional
+        config_file : str or pathlib.Path, optional
             The path to the config file that created this step, if
             any.  This is used to resolve relative file name
             parameters in the config file.
@@ -323,7 +326,7 @@ class Step:
             fully-qualified name for this step, and to determine
             the mode in which to run this step.
 
-        config_file : str path, optional
+        config_file : str or pathlib.Path, optional
             The path to the config file that this step was initialized
             with.  Use to determine relative path names of other config files.
 
@@ -428,8 +431,23 @@ class Step:
             step_result = None
 
             self.log.info("Step %s running with args %s.", self.name, args)
-
-            self.log.info("Step %s parameters are: %s", self.name, self.get_pars())
+            # log Step or Pipeline parameters from top level only
+            if self.parent is None:
+                self.log.info(
+                    "Step %s parameters are:%s",
+                    self.name,
+                    # Add an indent to each line of the YAML output
+                    "\n  "
+                    + "\n  ".join(
+                        yaml.dump(self.get_pars(), sort_keys=False)
+                        .strip()
+                        # Convert serialized YAML types true/false/null to Python types
+                        .replace(" false", " False")
+                        .replace(" true", " True")
+                        .replace(" null", " None")
+                        .splitlines()
+                    ),
+                )
 
             if len(args):
                 self.set_primary_input(args[0])
@@ -550,7 +568,8 @@ class Step:
                                 self.log.info("Saving file %s", output_path)
                                 result.save(output_path, overwrite=True)
 
-                self.log.info("Step %s done", self.name)
+                if not self.skip:
+                    self.log.info("Step %s done", self.name)
             finally:
                 log.delegator.log = orig_log
 
@@ -840,12 +859,12 @@ class Step:
             # If the dataset is not an operable instance of AbstractDataModel,
             # log as such and return an empty config object
             try:
-                model = cls._datamodels_open(dataset)
-                if isinstance(model, Sequence):
-                    # Pull out first model in ModelContainer
-                    model = model[0]
-                crds_parameters = model.get_crds_parameters()
-                crds_observatory = model.crds_observatory
+                with cls._datamodels_open(dataset, asn_n_members=1) as model:
+                    if isinstance(model, Sequence):
+                        # Pull out first model in ModelContainer
+                        model = model[0]
+                    crds_parameters = model.get_crds_parameters()
+                    crds_observatory = model.crds_observatory
             except (OSError, TypeError, ValueError):
                 logger.warning("Input dataset is not an instance of AbstractDataModel.")
                 disable = True
@@ -907,7 +926,7 @@ class Step:
 
         Parameters
         ----------
-        obj : str or instance of AbstractDataModel
+        obj : str, pathlib.Path, or instance of AbstractDataModel
             The object to base the name on. If a datamodel,
             use Datamodel.meta.filename.
 
@@ -920,8 +939,8 @@ class Step:
         err_message = f"Cannot set master input file name from object {obj}"
         parent_input_filename = self.search_attr("_input_filename")
         if not exclusive or parent_input_filename is None:
-            if isinstance(obj, str):
-                self._input_filename = obj
+            if isinstance(obj, (str, Path)):
+                self._input_filename = str(obj)
             elif isinstance(obj, AbstractDataModel):
                 try:
                     self._input_filename = obj.meta.filename
@@ -1298,7 +1317,7 @@ class Step:
 
         Parameters
         ----------
-        filename : str or pathlib.PurePath
+        filename : str or pathlib.Path
             Path to config file.
 
         include_metadata : bool, optional
@@ -1376,7 +1395,7 @@ class Step:
         if "config_file" in kwargs:
             config_file = kwargs["config_file"]
             del kwargs["config_file"]
-            config_from_file = config_parser.load_config_file(config_file)
+            config_from_file = config_parser.load_config_file(str(config_file))
             config_parser.merge_config(config, config_from_file)
             config_dir = os.path.dirname(config_file)
         else:
