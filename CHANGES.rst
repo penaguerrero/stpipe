@@ -1,7 +1,16 @@
-0.6.0 (unreleased)
+0.6.1 (unreleased)
+==================
+
+- remove Windows tests and add info box indicating lack of Windows support to README [#163]
+
+0.6.0 (2024-01-24)
 ==================
 
 - Remove unused ``Step.closeout`` [#152]
+- Remove unused ``Pipeline.set_input_filename``, ``Step.name_format``,
+  ``Step.resolve_file_name``, ``format`` argument to ``Step.save_model``,
+  ``name_format``, ``component_format`` and ``separator`` arguments to
+  ``Step._make_output_path`` and ``Step.reference_uri_to_cache_path``. [#154]
 
 0.5.2 (2024-03-21)
 ==================

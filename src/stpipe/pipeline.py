@@ -1,6 +1,7 @@
 """
 Pipeline
 """
+
 from collections.abc import Sequence
 from os.path import dirname, join
 from typing import ClassVar
@@ -243,11 +244,6 @@ class Pipeline(Step):
         pipeline_cfg = config_parser.load_config_file(ref_file)
         config_parser.merge_config(refcfg, pipeline_cfg)
         return refcfg
-
-    def set_input_filename(self, path):
-        self._input_filename = path
-        for key in self.step_defs:
-            getattr(self, key).set_input_filename(path)
 
     def _precache_references(self, input_file):
         """
